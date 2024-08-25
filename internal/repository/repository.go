@@ -52,6 +52,12 @@ func (repo *Repository) Run(args []string) error {
 	switch cmd {
 	case "init":
 		return repo.Init()
+	case "cat-file":
+		return repo.CatFile(args[1], args[2])
+	case "hash-object":
+		objKind := "blob"
+		write := false
+		return repo.HashObject(write, objKind, args[1])
 	}
 
 	return fmt.Errorf("%s command wasn't found", cmd)

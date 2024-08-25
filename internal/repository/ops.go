@@ -43,3 +43,47 @@ func (repo *Repository) Init() error {
 	fmt.Println("Initialized Twine repository")
 	return nil
 }
+
+func (repo *Repository) CatFile(objKind string, hash string) error {
+	sha, err := repo.findObject(hash)
+	if err != nil {
+		return err
+	}
+
+	obj, err := repo.makeObject(sha)
+	if err != nil {
+		return err
+	}
+
+	switch objKind {
+	case "blob":
+		if blob, ok := obj.(*Blob); ok {
+			fmt.Print(string(blob.contents))
+		} else {
+			return fmt.Errorf("Mismatched types. Object %s is not a blob", hash)
+		}
+	case "commit", "tree", "tag":
+		fmt.Print(string(obj.Serialize()))
+	default:
+		return fmt.Errorf("Unknown object type :%s", objKind)
+	}
+
+	return nil
+}
+
+func (repo *Repository) HashObject(write bool, objKind string, path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("Couldn't open file %v: %s", file, err)
+	}
+	defer file.Close()
+
+	sha, err := repo.makeObjectHash(file, objKind, write)
+	if err != nil {
+		return fmt.Errorf("Couldn't hash object: %v", err)
+	}
+
+	fmt.Println(sha)
+
+	return nil
+}

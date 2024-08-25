@@ -49,6 +49,10 @@ func (c *Commit) Deserialize(data []byte) {
 	c.message = message
 }
 
+func (t *Tag) Kind() string {
+	return "tag"
+}
+
 func (t *Tag) Serialize() []byte {
 	return serializeKvlm(t.toStringMap(), t.message)
 }
