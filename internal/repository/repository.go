@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -52,15 +53,32 @@ func (repo *Repository) Run(args []string) error {
 	switch cmd {
 	case "init":
 		return repo.Init()
+
 	case "cat-file":
 		return repo.CatFile(args[1], args[2])
-	case "hash-object":
-		objKind := "blob"
-		write := false
-		return repo.HashObject(write, objKind, args[1])
-	}
 
-	return fmt.Errorf("%s command wasn't found", cmd)
+	case "hash-object":
+		hashObjectCmd := flag.NewFlagSet("hash-object", flag.ExitOnError)
+		objKind := hashObjectCmd.String("t", "blob", "Type of object to hash")
+		write := hashObjectCmd.Bool("w", false, "Write the object into object database")
+		if err := hashObjectCmd.Parse(args[1:]); err != nil {
+			return err
+		}
+		paths := hashObjectCmd.Args()
+		if len(paths) == 0 {
+			return fmt.Errorf("Should've specified path")
+		}
+		for _, path := range paths {
+			err := repo.HashObject(*write, *objKind, path)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("%s command wasn't found", cmd)
+	}
 }
 
 func findRepoRoot(path string) (string, error) {
