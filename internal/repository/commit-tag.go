@@ -2,6 +2,7 @@ package repository
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 )
 
@@ -117,6 +118,15 @@ func serializeKvlm(klvm map[string][]string, message string) []byte {
 	buffer.WriteString(message)
 
 	return buffer.Bytes()
+}
+
+func (c *Commit) getField(key string) (string, error) {
+	field := CommitField(key)
+	values, ok := c.metaKV[field]
+	if !ok || len(values) == 0 {
+		return "", fmt.Errorf("Field %s does not exist", key)
+	}
+	return values[0], nil
 }
 
 func (c *Commit) toStringMap() map[string][]string {

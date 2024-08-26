@@ -55,7 +55,7 @@ func (repo *Repository) Run(args []string) error {
 		return repo.Init()
 
 	case "cat-file":
-		return repo.CatFile(args[1], args[2])
+		return repo.CatFile(args[1:])
 
 	case "hash-object":
 		hashObjectCmd := flag.NewFlagSet("hash-object", flag.ExitOnError)
@@ -66,7 +66,7 @@ func (repo *Repository) Run(args []string) error {
 		}
 		paths := hashObjectCmd.Args()
 		if len(paths) == 0 {
-			return fmt.Errorf("Should've specified path")
+			return fmt.Errorf("Expected path")
 		}
 		for _, path := range paths {
 			err := repo.HashObject(*write, *objKind, path)
@@ -75,6 +75,19 @@ func (repo *Repository) Run(args []string) error {
 			}
 		}
 		return nil
+
+	case "ls-tree":
+		lsTreeCmd := flag.NewFlagSet("ls-tree", flag.ExitOnError)
+		recursive := lsTreeCmd.Bool("r", false, "Recurse into sub-trees")
+		if err := lsTreeCmd.Parse(args[1:]); err != nil {
+			return err
+		}
+		treeish := lsTreeCmd.Args()
+		if len(treeish) == 0 {
+			return fmt.Errorf("Expected tree ref")
+		}
+
+		return repo.LsTree(treeish[0], *recursive)
 
 	default:
 		return fmt.Errorf("%s command wasn't found", cmd)
