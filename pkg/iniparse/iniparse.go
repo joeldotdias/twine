@@ -60,7 +60,8 @@ func (i *Ini) Write(path string) error {
 		tw += sw + "\n"
 	}
 
-	err := os.WriteFile(path, []byte(tw), 0o644)
+	// skip the last newline
+	err := os.WriteFile(path, []byte(tw[:len(tw)-1]), 0o644)
 	if err != nil {
 		return fmt.Errorf("Failed to write to file %s: %s", path, err)
 	}

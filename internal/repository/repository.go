@@ -1,9 +1,9 @@
 package repository
 
 import (
-	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -14,17 +14,24 @@ type Repository struct {
 	worktree string
 	gitDir   string
 	conf     Config
-	refs     map[string]string
+	refStore *RefStore
+}
+
+type RefStore struct {
+	heads map[string]string
+	tags  map[string]string
 }
 
 func Repo(cmd string) (*Repository, error) {
 	var worktree string
 	var err error
+	// bad bad code
+	isInit := cmd == "init"
 
-	if cmd == "init" {
+	if isInit {
 		worktree, err = os.Getwd()
 	} else {
-		worktree, err = findRepoRoot(".")
+		worktree, err = helpers.SearchRoot(".")
 	}
 	if err != nil {
 		return nil, err
@@ -32,19 +39,72 @@ func Repo(cmd string) (*Repository, error) {
 
 	gitDir := filepath.Join(worktree, ".git")
 	conf := makeCfg()
-	refs := make(map[string]string)
+	reef := &RefStore{}
 
-	return &Repository{
+	repo := &Repository{
 		worktree,
 		gitDir,
 		conf,
-		refs,
-	}, nil
+		reef,
+	}
+
+	if !isInit {
+		err = repo.findRefs()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return repo, nil
 }
 
 func (repo *Repository) makePath(paths ...string) string {
 	parts := append([]string{repo.gitDir}, paths...)
 	return filepath.Join(parts...)
+}
+
+// loads the refs and current head
+// into repo struct
+func (repo *Repository) findRefs() error {
+	repo.refStore.heads = make(map[string]string)
+	repo.refStore.tags = make(map[string]string)
+
+	paths := []struct {
+		path    string
+		refType string
+	}{
+		{repo.makePath("refs", "heads"), "heads"},
+		{repo.makePath("refs", "tags"), "tags"},
+	}
+
+	for _, p := range paths {
+		err := filepath.WalkDir(p.path, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !d.IsDir() {
+				contents, err := os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+
+				ref := string(contents[:len(contents)-1])
+				name := filepath.Base(path)
+				switch p.refType {
+				case "heads":
+					repo.refStore.heads[ref] = name
+				case "tags":
+					repo.refStore.tags[ref] = name
+				}
+			}
+			return nil
+		})
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("error walking %s: %w", p.path, err)
+		}
+	}
+
+	return nil
 }
 
 func (repo *Repository) Run(args []string) error {
@@ -89,25 +149,22 @@ func (repo *Repository) Run(args []string) error {
 
 		return repo.LsTree(treeish[0], *recursive)
 
+	case "log":
+		return repo.Log()
+
+	case "show-ref":
+		kind := ""
+		if len(args) > 1 {
+			kind = args[1][2:]
+		}
+		return repo.ShowRef(kind)
+
 	default:
-		return fmt.Errorf("%s command wasn't found", cmd)
+		return fmt.Errorf("%s command wasn't found\n", cmd)
 	}
 }
 
-func findRepoRoot(path string) (string, error) {
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-
-	if helpers.IsDir(filepath.Join(absPath, ".git")) {
-		return absPath, nil
-	}
-
-	parent := filepath.Dir(absPath)
-	if parent == absPath {
-		return "", errors.New("Not in a repository. Run gat init to make one.")
-	}
-
-	return findRepoRoot(parent)
+func (repo *Repository) isRef(sha string) string {
+	ref := repo.refStore.heads[sha]
+	return ref
 }

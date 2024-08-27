@@ -6,21 +6,49 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/joeldotdias/twine/pkg/iniparse"
 )
 
 func (repo *Repository) Init() error {
-	for _, dir := range []string{repo.gitDir, repo.makePath("objects"), repo.makePath("refs"), repo.makePath("branches")} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
+	dirs := map[string][]string{
+		// "":         {},
+		"objects":  {"info", "pack"},
+		"refs":     {"heads", "tags"},
+		"info":     {},
+		"hooks":    {},
+		"branches": {},
+	}
+
+	for dir, subdirs := range dirs {
+		if len(subdirs) == 0 {
+			path := repo.makePath(dir)
+			if err := os.MkdirAll(path, 0o755); err != nil {
+				return err
+			}
+		}
+
+		for _, subsubdir := range subdirs {
+			subpath := repo.makePath(dir, subsubdir)
+			if err := os.MkdirAll(subpath, 0o755); err != nil {
+				return err
+			}
+
 		}
 	}
 
 	toWrite := map[string]string{
 		"HEAD":        "ref: refs/heads/" + repo.conf.defaultBranch + "\n",
 		"description": "Unnamed repository; edit this file 'description' to name the repository.\n",
+		"info/exclude": "# git ls-files --others --exclude-from=.git/info/exclude\n" +
+			"# Lines that start with '#' are comments.\n" +
+			"# For a project mostly in C, the following would be a good set of\n" +
+			"# exclude patterns (uncomment them if you want to use them):\n" +
+			"# *.[oa]\n" +
+			"# *~\n",
 	}
+
 	for fname, contents := range toWrite {
 		if err := os.WriteFile(repo.makePath(fname), []byte(contents), 0o644); err != nil {
 			return err
@@ -119,8 +147,8 @@ func (repo *Repository) HashObject(write bool, objKind string, path string) erro
 	return nil
 }
 
-func (repo *Repository) LsTree(tree string, recursive bool) error {
-	return repo.walkTree(tree, recursive, "")
+func (repo *Repository) LsTree(treeish string, recursive bool) error {
+	return repo.walkTree(treeish, recursive, "")
 }
 
 func (repo *Repository) walkTree(ref string, recursive bool, prefix string) error {
@@ -152,11 +180,12 @@ func (repo *Repository) walkTree(ref string, recursive bool, prefix string) erro
 		tree = o
 
 	default:
-		return fmt.Errorf("Object %s is neither a tree nor a commit. It's type is %s", sha, obj.Kind())
+		return fmt.Errorf("Object %s is neither a tree nor a commit. It's a %s", sha, obj.Kind())
 	}
 
 	for _, leaf := range tree.leaves {
 		var typeStr string
+		shaStr := hex.EncodeToString(leaf.sha)
 
 		switch leaf.mode {
 		case "40000":
@@ -175,16 +204,90 @@ func (repo *Repository) walkTree(ref string, recursive bool, prefix string) erro
 			fmt.Printf("%06s %s %s\t%s\n",
 				leaf.mode,
 				typeStr,
-				hex.EncodeToString(leaf.sha),
+				shaStr,
 				filepath.Join(prefix, leaf.path))
 		}
 
 		if recursive && typeStr == "tree" {
-			err := repo.walkTree(hex.EncodeToString(leaf.sha), recursive, filepath.Join(prefix, leaf.path))
+			err := repo.walkTree(shaStr, recursive, filepath.Join(prefix, leaf.path))
 			if err != nil {
 				return err
 			}
 		}
+	}
+
+	return nil
+}
+
+func (repo *Repository) Log() error {
+	_, err := repo.makeCommitLog("HEAD")
+	if err != nil {
+		return fmt.Errorf("Couldn't parse commit log: %s", err)
+	}
+
+	return nil
+}
+
+func (repo *Repository) makeCommitLog(ref string) (*Commit, error) {
+	sha, err := repo.findObject(ref)
+	if err != nil {
+		fmt.Fprint(os.Stderr, err.Error())
+		return nil, err
+	}
+	obj, err := repo.makeObject(sha)
+	if err != nil {
+		fmt.Fprint(os.Stderr, err.Error())
+		return nil, err
+	}
+
+	commit, ok := obj.(*Commit)
+	if !ok {
+		return nil, nil
+	}
+
+	commitLog, parent, err := commit.parseCommitLog(sha, func() (string, bool) {
+		return repo.isRef(sha), ref == "HEAD"
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Couldn't parse commit log: %s", err)
+	}
+
+	fmt.Print(commitLog)
+
+	if len(parent) > 0 {
+		commit, err = repo.makeCommitLog(parent)
+		if err != nil {
+			fmt.Fprint(os.Stderr, err.Error())
+		}
+	}
+
+	return commit, nil
+}
+
+func (repo *Repository) ShowRef(kind string) error {
+	fmt.Println(kind)
+	var headRefs, tagRefs, showRefs []string
+
+	for sha, refName := range repo.refStore.heads {
+		headRefs = append(headRefs, fmt.Sprintf("%s refs/heads/%s", sha, refName))
+	}
+	for sha, refName := range repo.refStore.tags {
+		tagRefs = append(tagRefs, fmt.Sprintf("%s refs/tags/%s", sha, refName))
+	}
+	sort.Strings(headRefs)
+	sort.Strings(tagRefs)
+
+	switch kind {
+	case "heads", "branches":
+		showRefs = headRefs
+	case "tags":
+		showRefs = tagRefs
+	default:
+		showRefs = append(headRefs, tagRefs...)
+	}
+
+	for _, ref := range showRefs {
+		fmt.Println(ref)
 	}
 
 	return nil

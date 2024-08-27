@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type (
@@ -62,6 +63,48 @@ func (t *Tag) Deserialize(data []byte) {
 	kv, message := parseKvlm(data)
 	t.fromStringMap(kv)
 	t.message = message
+}
+
+func (c *Commit) parseCommitLog(sha string, checkRef func() (string, bool)) (string, string, error) {
+	var cmtStr strings.Builder
+
+	cmtStr.WriteString(fmt.Sprintf("\033[33m" + "commit " + sha + "\033[0m"))
+	if ref, isHead := checkRef(); ref != "" {
+		cmtStr.WriteString("\033[33m (")
+		if isHead {
+			cmtStr.WriteString("\033[36;1mHEAD \033[0m\033[33m-> \033[0m")
+		}
+		cmtStr.WriteString("\033[32;1m")
+		cmtStr.WriteString(ref)
+		cmtStr.WriteString("\033[0m\033[33m)\033[0m")
+	}
+
+	stats, _ := c.getField("author")
+	parts := strings.Split(stats, "> ")
+	author, timestampStr := parts[0], parts[1]
+	var timestamp int64
+	var tzOffset string
+	_, err := fmt.Sscanf(timestampStr, "%d %s", &timestamp, &tzOffset)
+	if err != nil {
+		return "", "", fmt.Errorf("Malformed unix timestamp: %s", err)
+	}
+	tz, err := time.Parse("-0700", tzOffset)
+	if err != nil {
+		return "", "", err
+	}
+
+	t := time.Unix(timestamp, 0).In(tz.Location())
+
+	// author, date and message
+	cmtStr.WriteString("\nAuthor: " + author)
+	cmtStr.WriteString(">\nDate: " + t.Format("Mon Jan 2 15:04:05 2006"))
+	cmtStr.WriteString(" " + tzOffset)
+
+	cmtStr.WriteString("\n\n\t" + c.message + "\n")
+
+	parent, _ := c.getField("parent")
+
+	return cmtStr.String(), parent, nil
 }
 
 // kvlm -> Key Value List with Message
