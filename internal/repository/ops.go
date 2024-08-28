@@ -7,13 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/joeldotdias/twine/pkg/iniparse"
 )
 
 func (repo *Repository) Init() error {
 	dirs := map[string][]string{
-		// "":         {},
 		"objects":  {"info", "pack"},
 		"refs":     {"heads", "tags"},
 		"info":     {},
@@ -267,15 +268,23 @@ func (repo *Repository) makeCommitLog(ref string) (*Commit, error) {
 func (repo *Repository) ShowRef(kind string) error {
 	fmt.Println(kind)
 	var headRefs, tagRefs, showRefs []string
+	extractRef := func(ref string) string {
+		return strings.SplitN(strings.SplitN(ref, " ", 2)[1], "/", 3)[2]
+	}
 
 	for sha, refName := range repo.refStore.heads {
 		headRefs = append(headRefs, fmt.Sprintf("%s refs/heads/%s", sha, refName))
 	}
+	sort.Slice(headRefs, func(i, j int) bool {
+		return extractRef(headRefs[i]) < extractRef(headRefs[j])
+	})
+
 	for sha, refName := range repo.refStore.tags {
 		tagRefs = append(tagRefs, fmt.Sprintf("%s refs/tags/%s", sha, refName))
 	}
-	sort.Strings(headRefs)
-	sort.Strings(tagRefs)
+	sort.Slice(tagRefs, func(i, j int) bool {
+		return extractRef(tagRefs[i]) < extractRef(tagRefs[j])
+	})
 
 	switch kind {
 	case "heads", "branches":
@@ -288,6 +297,109 @@ func (repo *Repository) ShowRef(kind string) error {
 
 	for _, ref := range showRefs {
 		fmt.Println(ref)
+	}
+
+	return nil
+}
+
+func (repo *Repository) ListTags() error {
+	tagsPath := repo.makePath("refs", "tags")
+	files, err := os.ReadDir(tagsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		} else {
+			return fmt.Errorf("Couldn't read tags: %s", err)
+		}
+	}
+
+	for _, file := range files {
+		fmt.Println(file.Name())
+	}
+
+	return nil
+}
+
+func (repo *Repository) CreateTag(args []string) error {
+	var tagname, message string
+	commit := "HEAD"
+	alen := len(args)
+	if alen == 1 {
+		tagname = args[0]
+		return repo.createLightweightTag(tagname, "HEAD")
+	} else if alen == 2 {
+		if args[0] == "-d" {
+			tagname = args[1]
+			return repo.deleteTag(tagname)
+		} else {
+			tagname = args[0]
+			commit = args[1]
+			return repo.createLightweightTag(tagname, commit)
+		}
+	} else if args[0] == "-a" {
+		tagname = args[1]
+		if args[2] != "-m" {
+			commit = args[2]
+			message = args[4]
+		} else {
+			message = args[3]
+		}
+
+		return repo.createAnnotatedTag(tagname, commit, message)
+	}
+
+	return nil
+}
+
+func (repo *Repository) createAnnotatedTag(name, ref, message string) error {
+	sha, err := repo.findObject(ref)
+	if err != nil {
+		return fmt.Errorf("Couldn't find ref %s: %s", ref, err)
+	}
+	obj, err := repo.makeObject(sha)
+	if err != nil {
+		return fmt.Errorf("Couldn't find object %s: %s", sha, err)
+	}
+
+	_, ok := obj.(*Commit)
+	if !ok {
+		return fmt.Errorf("Tags can only be created on commits but %s is a %s", ref, obj.Kind())
+	}
+
+	tagger := fmt.Sprintf("%s <%s> %d +0000", repo.conf.username, repo.conf.email, time.Now().Unix())
+
+	tag := &Tag{
+		metaKV: map[TagField][]string{
+			"object": {sha},
+			"type":   {"commit"},
+			"tag":    {name},
+			"tagger": {tagger},
+		},
+		message: message,
+	}
+
+	tagSha, err := repo.writeObject(tag, true)
+	if err != nil {
+		return fmt.Errorf("Couldn't write tag object: %s", err)
+	}
+
+	return os.WriteFile(repo.makePath("refs", "tags", name), []byte(tagSha), 0o644)
+}
+
+func (repo *Repository) createLightweightTag(name, ref string) error {
+	sha, _ := repo.findObject(ref)
+	_, err := repo.makeObject(sha)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(repo.makePath("refs", "tags", name), []byte(sha), 0o644)
+}
+
+func (repo *Repository) deleteTag(name string) error {
+	err := os.Remove(repo.makePath("refs", "tags", name))
+	if err != nil {
+		return fmt.Errorf("Couldn't delete tag %s: %w", name, err)
 	}
 
 	return nil

@@ -159,6 +159,13 @@ func (repo *Repository) Run(args []string) error {
 		}
 		return repo.ShowRef(kind)
 
+	case "tag":
+		if len(args) == 1 {
+			return repo.ListTags()
+		} else {
+			return repo.CreateTag(args[1:])
+		}
+
 	default:
 		return fmt.Errorf("%s command wasn't found\n", cmd)
 	}

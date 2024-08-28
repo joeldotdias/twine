@@ -82,10 +82,6 @@ func (repo *Repository) makeObject(sha string) (Object, error) {
 
 func (repo *Repository) writeObject(obj Object, write bool) (string, error) {
 	raw := obj.Serialize()
-	// res := []byte(fmt.Sprintf("%s %d\x00", obj.Kind(), len(data)))
-	// res = append(res, data...)
-	// hash := sha1.Sum(res)
-	// sha := hex.EncodeToString(hash[:])
 
 	header := fmt.Sprintf("%s %d\x00", obj.Kind(), len(raw))
 	data := append([]byte(header), raw...)
@@ -149,14 +145,14 @@ func (repo *Repository) makeObjectHash(file io.Reader, objKind string, write boo
 	return repo.writeObject(obj, write)
 }
 
-func (repo *Repository) findObject(name string) (string, error) {
+func (repo *Repository) findObject(ref string) (string, error) {
 	// full SHA-1 hash
-	if len(name) == 40 && helpers.IsHex(name) {
-		return name, nil
+	if len(ref) == 40 && helpers.IsHex(ref) {
+		return ref, nil
 	}
 
 	// ref to HEAD
-	if name == "HEAD" {
+	if ref == "HEAD" {
 		headPath := repo.makePath("refs", "heads", repo.conf.defaultBranch)
 		contents, err := os.ReadFile(headPath)
 		if err != nil {
@@ -166,7 +162,7 @@ func (repo *Repository) findObject(name string) (string, error) {
 	}
 
 	// any other ref
-	path := repo.makePath("refs", name)
+	path := repo.makePath("refs", ref)
 	if _, err := os.Stat(path); err == nil {
 		contents, err := os.ReadFile(path)
 		if err != nil {
@@ -176,15 +172,18 @@ func (repo *Repository) findObject(name string) (string, error) {
 	}
 
 	// partial object hashes
-	prefix := name[:2]
+	prefix := ref[:2]
 	path = repo.makePath("objects", prefix)
-	if matches, err := filepath.Glob(filepath.Join(path, name[2:]+"*")); err == nil && len(matches) > 0 {
+	if matches, err := filepath.Glob(filepath.Join(path, ref[2:]+"*")); err == nil && len(matches) > 0 {
 		if len(matches) > 1 {
-			return "", fmt.Errorf("Found multiple objects with prefix: %s. Be more specific", name)
+			return "", fmt.Errorf("Found multiple objects with prefix: %s. Be more specific", ref)
 		}
 
-		return filepath.Base(prefix + matches[0]), nil
+		// fmt.Println(matches[0], filepath.Base(matches[0]))
+
+		// return prefix + filepath.Base(prefix+matches[0]), nil
+		return prefix + filepath.Base(matches[0]), nil
 	}
 
-	return "", fmt.Errorf("Didn't find object: %s", name)
+	return "", fmt.Errorf("Didn't find object: %s", ref)
 }
