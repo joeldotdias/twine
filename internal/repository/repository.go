@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/joeldotdias/twine/internal/helpers"
 )
@@ -15,6 +16,7 @@ type Repository struct {
 	gitDir   string
 	conf     Config
 	refStore *RefStore
+	index    *Index
 }
 
 type RefStore struct {
@@ -25,7 +27,6 @@ type RefStore struct {
 func Repo(cmd string) (*Repository, error) {
 	var worktree string
 	var err error
-	// bad bad code
 	isInit := cmd == "init"
 
 	if isInit {
@@ -39,17 +40,23 @@ func Repo(cmd string) (*Repository, error) {
 
 	gitDir := filepath.Join(worktree, ".git")
 	conf := makeCfg()
-	reef := &RefStore{}
+	refStore := &RefStore{}
+	index := &Index{}
 
 	repo := &Repository{
 		worktree,
 		gitDir,
 		conf,
-		reef,
+		refStore,
+		index,
 	}
 
 	if !isInit {
 		err = repo.findRefs()
+		if err != nil {
+			return nil, err
+		}
+		repo.index, err = parseIndex(repo.makePath("index"))
 		if err != nil {
 			return nil, err
 		}
@@ -88,7 +95,7 @@ func (repo *Repository) findRefs() error {
 					return err
 				}
 
-				ref := string(contents[:len(contents)-1])
+				ref := strings.TrimSpace(string(contents))
 				name := filepath.Base(path)
 				switch p.refType {
 				case "heads":
@@ -112,10 +119,10 @@ func (repo *Repository) Run(args []string) error {
 
 	switch cmd {
 	case "init":
-		return repo.Init()
+		return repo.init()
 
 	case "cat-file":
-		return repo.CatFile(args[1:])
+		return repo.catFile(args[1:])
 
 	case "hash-object":
 		hashObjectCmd := flag.NewFlagSet("hash-object", flag.ExitOnError)
@@ -129,7 +136,7 @@ func (repo *Repository) Run(args []string) error {
 			return fmt.Errorf("Expected path")
 		}
 		for _, path := range paths {
-			err := repo.HashObject(*write, *objKind, path)
+			err := repo.hashObject(*write, *objKind, path)
 			if err != nil {
 				return err
 			}
@@ -147,24 +154,27 @@ func (repo *Repository) Run(args []string) error {
 			return fmt.Errorf("Expected tree ref")
 		}
 
-		return repo.LsTree(treeish[0], *recursive)
+		return repo.lsTree(treeish[0], *recursive)
 
 	case "log":
-		return repo.Log()
+		return repo.log()
 
 	case "show-ref":
 		kind := ""
 		if len(args) > 1 {
 			kind = args[1][2:]
 		}
-		return repo.ShowRef(kind)
+		return repo.showRef(kind)
 
 	case "tag":
 		if len(args) == 1 {
-			return repo.ListTags()
+			return repo.listTags()
 		} else {
-			return repo.CreateTag(args[1:])
+			return repo.createTag(args[1:])
 		}
+
+	case "ls-files":
+		return repo.lsFiles(args[1:])
 
 	default:
 		return fmt.Errorf("%s command wasn't found\n", cmd)

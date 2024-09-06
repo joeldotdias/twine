@@ -1,3 +1,6 @@
+dbg:cli
+	@twine dbg
+
 cli:build
 	@cp ./bin/twine ~/bin/projects/twine
 

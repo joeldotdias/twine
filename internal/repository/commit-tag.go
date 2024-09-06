@@ -68,7 +68,7 @@ func (t *Tag) Deserialize(data []byte) {
 func (c *Commit) parseCommitLog(sha string, checkRef func() (string, bool)) (string, string, error) {
 	var cmtStr strings.Builder
 
-	cmtStr.WriteString(fmt.Sprintf("\033[33m" + "commit " + sha + "\033[0m"))
+	cmtStr.WriteString("\033[33m" + "commit " + sha + "\033[0m")
 	if ref, isHead := checkRef(); ref != "" {
 		cmtStr.WriteString("\033[33m (")
 		if isHead {

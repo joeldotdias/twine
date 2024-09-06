@@ -13,7 +13,7 @@ import (
 	"github.com/joeldotdias/twine/pkg/iniparse"
 )
 
-func (repo *Repository) Init() error {
+func (repo *Repository) init() error {
 	dirs := map[string][]string{
 		"objects":  {"info", "pack"},
 		"refs":     {"heads", "tags"},
@@ -76,7 +76,7 @@ func (repo *Repository) Init() error {
 	return nil
 }
 
-func (repo *Repository) CatFile(args []string) error {
+func (repo *Repository) catFile(args []string) error {
 	catFileCmd := flag.NewFlagSet("cat-file", flag.ExitOnError)
 
 	typeFlag := catFileCmd.Bool("t", false, "Show object type")
@@ -131,7 +131,7 @@ func (repo *Repository) CatFile(args []string) error {
 	return nil
 }
 
-func (repo *Repository) HashObject(write bool, objKind string, path string) error {
+func (repo *Repository) hashObject(write bool, objKind string, path string) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("Couldn't open file %v: %s", file, err)
@@ -148,7 +148,7 @@ func (repo *Repository) HashObject(write bool, objKind string, path string) erro
 	return nil
 }
 
-func (repo *Repository) LsTree(treeish string, recursive bool) error {
+func (repo *Repository) lsTree(treeish string, recursive bool) error {
 	return repo.walkTree(treeish, recursive, "")
 }
 
@@ -220,7 +220,7 @@ func (repo *Repository) walkTree(ref string, recursive bool, prefix string) erro
 	return nil
 }
 
-func (repo *Repository) Log() error {
+func (repo *Repository) log() error {
 	_, err := repo.makeCommitLog("HEAD")
 	if err != nil {
 		return fmt.Errorf("Couldn't parse commit log: %s", err)
@@ -265,7 +265,7 @@ func (repo *Repository) makeCommitLog(ref string) (*Commit, error) {
 	return commit, nil
 }
 
-func (repo *Repository) ShowRef(kind string) error {
+func (repo *Repository) showRef(kind string) error {
 	fmt.Println(kind)
 	var headRefs, tagRefs, showRefs []string
 	extractRef := func(ref string) string {
@@ -302,7 +302,7 @@ func (repo *Repository) ShowRef(kind string) error {
 	return nil
 }
 
-func (repo *Repository) ListTags() error {
+func (repo *Repository) listTags() error {
 	tagsPath := repo.makePath("refs", "tags")
 	files, err := os.ReadDir(tagsPath)
 	if err != nil {
@@ -320,7 +320,7 @@ func (repo *Repository) ListTags() error {
 	return nil
 }
 
-func (repo *Repository) CreateTag(args []string) error {
+func (repo *Repository) createTag(args []string) error {
 	var tagname, message string
 	commit := "HEAD"
 	alen := len(args)
@@ -400,6 +400,16 @@ func (repo *Repository) deleteTag(name string) error {
 	err := os.Remove(repo.makePath("refs", "tags", name))
 	if err != nil {
 		return fmt.Errorf("Couldn't delete tag %s: %w", name, err)
+	}
+
+	return nil
+}
+
+func (repo *Repository) lsFiles(args []string) error {
+	if len(args) == 0 {
+		for _, entry := range repo.index.entries {
+			fmt.Println(entry.path)
+		}
 	}
 
 	return nil
