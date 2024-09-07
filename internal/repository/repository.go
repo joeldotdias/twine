@@ -176,6 +176,10 @@ func (repo *Repository) Run(args []string) error {
 	case "ls-files":
 		return repo.lsFiles(args[1:])
 
+	case "dbg":
+		repo.dbg()
+		return nil
+
 	default:
 		return fmt.Errorf("%s command wasn't found\n", cmd)
 	}
