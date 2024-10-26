@@ -12,11 +12,12 @@ import (
 )
 
 type Repository struct {
-	worktree string
-	gitDir   string
-	conf     Config
-	refStore *RefStore
-	index    *Index
+	worktree    string
+	gitDir      string
+	conf        Config
+	refStore    *RefStore
+	index       *Index
+	ignoreRules []IgnoreRule
 }
 
 type RefStore struct {
@@ -42,6 +43,7 @@ func Repo(cmd string) (*Repository, error) {
 	conf := makeCfg()
 	refStore := &RefStore{}
 	index := &Index{}
+	ignoreRules, err := parseIgnore(".gitignore")
 
 	repo := &Repository{
 		worktree,
@@ -49,6 +51,7 @@ func Repo(cmd string) (*Repository, error) {
 		conf,
 		refStore,
 		index,
+		ignoreRules,
 	}
 
 	if !isInit {
@@ -175,6 +178,9 @@ func (repo *Repository) Run(args []string) error {
 
 	case "ls-files":
 		return repo.lsFiles(args[1:])
+
+	case "check-ignore":
+		return repo.checkIgnore(args[1:])
 
 	case "dbg":
 		repo.dbg()

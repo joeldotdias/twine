@@ -414,3 +414,41 @@ func (repo *Repository) lsFiles(args []string) error {
 
 	return nil
 }
+
+func (repo *Repository) checkIgnore(paths []string) error {
+	found := false
+
+	for _, path := range paths {
+		path = strings.TrimPrefix(path, "./")
+
+		ignored := false
+
+		for _, rule := range repo.ignoreRules {
+			checkPath := path
+
+			if rule.anchored {
+				if !strings.HasPrefix(checkPath, repo.worktree) {
+					checkPath = filepath.Join(repo.worktree, path)
+				}
+			}
+
+			if matchesRule(checkPath, rule) {
+				ignored = true
+				break
+			}
+
+			// ignored = matchesRule(checkPath, rule, repo.makePath(".gitignore"))
+		}
+
+		if ignored {
+			fmt.Println(path)
+			found = true
+		}
+	}
+
+	if !found {
+		os.Exit(1)
+	}
+
+	return nil
+}

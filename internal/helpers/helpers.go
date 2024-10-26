@@ -13,7 +13,7 @@ func SearchRoot(path string) (string, error) {
 		return "", err
 	}
 
-	if isDir(filepath.Join(absPath, ".git")) {
+	if IsDir(filepath.Join(absPath, ".git")) {
 		return absPath, nil
 	}
 
@@ -25,7 +25,7 @@ func SearchRoot(path string) (string, error) {
 	return SearchRoot(parent)
 }
 
-func isDir(path string) bool {
+func IsDir(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
 		return false

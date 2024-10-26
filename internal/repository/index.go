@@ -7,6 +7,34 @@ import (
 	"os"
 )
 
+/*
+ *                            Git Index File Format
+ * +-----------------------------+----------------+-----------------------+----------------+
+ * |       12-byte Header        |                |                       |				   |
+ * +-----------------------------+                |                       | 	 		   |
+ * | 4-byte  | 4-byte  | 32-bit  |  Index Entries |      Extensions       |	 Hash Checksum |
+ * |signature| version | entries |  			  |      (optional)		  |				   |
+ * |  DIRC   |  2,3,4  |  count  |                |                    	  |				   |
+ * +---------+---------+---------+----------------+-----------------------+----------------+
+ *                                                |       Structure		  |
+ *                                                +-----------------------+
+ *                                                | 4-byte    |  32-bit   |
+ *                                             	  | extension | extension |
+ *                                                | signature |   size    |
+ *                                                +-----------+-----------+
+ *
+ *                          Index Entry Format
+ * +--------+--------+--------+--------+--------+--------+------------+
+ * | 32-bit | 32-bit | 32-bit | 32-bit | 32-bit | 32-bit |   32-bit   |
+ * | ctime  | ctime  | mtime  | mtime  |  dev   |  ino   |   mode     |
+ * |  sec   |  nsec  |  sec   |  nsec  |        |        |            |
+ * +--------+--------+--------+--------+--------+--------+------------+
+ * | 32-bit | 32-bit | 32-bit |        | 16-bit |variable|  1-8 byte  |
+ * |  uid   |  gid   |  size  |  SHA   | flags  |  path  |  padding   |
+ * |        |        |        |        |        |  name  |            |
+ * +--------+--------+--------+--------+--------+--------+------------+
+ */
+
 type Index struct {
 	header  *Header
 	entries []*Entry
